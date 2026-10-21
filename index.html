@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alphabet Shooter - A to Z Kids Learning Game</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Canvas Confetti Library -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Quicksand:wght@500;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Fredoka One', 'Quicksand', cursive, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+
+        /* Animated Sky Background Gradient */
+        .sky-bg {
+            background: linear-gradient(180deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%);
+        }
+
+        /* Floating Cloud Animations */
+        .cloud {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.85);
+            border-radius: 999px;
+            filter: blur(1px);
+            animation: floatCloud linear infinite;
+        }
+
+        @keyframes floatCloud {
+            0% { transform: translateX(-200px); }
+            100% { transform: translateX(100vw); }
+        }
+
+        /* Custom Crosshair Cursor for Play Area */
+        .game-canvas-container {
+            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36"><circle cx="18" cy="18" r="14" fill="none" stroke="%23f43f5e" stroke-width="3"/><circle cx="18" cy="18" r="4" fill="%23f43f5e"/><line x1="18" y1="0" x2="18" y2="36" stroke="%23f43f5e" stroke-width="2"/><line x1="0" y1="18" x2="36" y2="18" stroke="%23f43f5e" stroke-width="2"/></svg>') 18 18, crosshair;
+        }
+
+        /* Pop & Bounce Animations */
+        @keyframes bounceTarget {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+        }
+
+        .bounce-prompt {
+            animation: bounceTarget 1.2s infinite ease-in-out;
+        }
+
+        /* Custom Button Hover Depth Effects */
+        .btn-3d {
+            transition: all 0.1s ease;
+            box-shadow: 0 6px 0 rgba(0, 0, 0, 0.2);
+        }
+        .btn-3d:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 rgba(0, 0, 0, 0.2);
+        }
+
+        /* Particle effects overlay */
+        #particleCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 25;
+        }
+    </style>
+</head>
+<body class="sky-bg h-screen w-screen flex flex-col justify-between overflow-hidden relative">
+
+    <!-- Background Animated Clouds -->
+    <div id="cloudContainer" class="absolute inset-0 pointer-events-none z-0"></div>
+
+    <!-- Canvas for Floating Balloons/Targets -->
+    <div id="gameContainer" class="relative w-full h-full game-canvas-container z-10 flex flex-col justify-between p-4">
+        
+        <!-- Header / Top Bar Controls & Target Banner -->
+        <header class="flex flex-wrap items-center justify-between gap-2 z-20 bg-white/30 backdrop-blur-md p-3 rounded-2xl border-2 border-white/50 shadow-lg">
+            
+            <!-- Left Controls: Sound / Speech Toggle & Home -->
+            <div class="flex items-center gap-2">
+                <button id="btnHome" class="btn-3d bg-yellow-400 hover:bg-yellow-300 text-yellow-900 font-bold p-3 rounded-xl border-b-4 border-yellow-600 flex items-center justify-center text-lg">
+                    <i class="fa-solid fa-house"></i>
+                </button>
+                <button id="btnMute" class="btn-3d bg-sky-400 hover:bg-sky-300 text-sky-900 font-bold p-3 rounded-xl border-b-4 border-sky-600 flex items-center justify-center text-lg">
+                    <i id="soundIcon" class="fa-solid fa-volume-high"></i>
+                </button>
+                <button id="btnRepeatSpeech" class="btn-3d bg-purple-500 hover:bg-purple-400 text-white font-bold px-3 py-2 rounded-xl border-b-4 border-purple-700 flex items-center gap-2 text-sm md:text-base">
+                    <i class="fa-solid fa-bullhorn text-yellow-300 animate-pulse"></i>
+                    <span>Say Again!</span>
+                </button>
+            </div>
+
+            <!-- Center Target Display Prompt -->
+            <div id="targetDisplayBox" class="flex items-center gap-3 bg-white/90 px-5 py-2 rounded-2xl border-4 border-yellow-400 shadow-xl bounce-prompt">
+                <span class="text-gray-700 font-extrabold text-sm md:text-xl uppercase tracking-wide">Shoot:</span>
+                <span id="targetLetter" class="text-4xl md:text-6xl font-black text-rose-500 tracking-wider">A</span>
+                <span id="targetWord" class="text-sm md:text-lg text-indigo-600 font-bold hidden sm:inline">(A for Apple)</span>
+            </div>
+
+            <!-- Right Controls: Score & Star Streak -->
+            <div class="flex items-center gap-3">
+                <div class="bg-amber-400 text-amber-950 px-4 py-2 rounded-xl border-2 border-amber-500 shadow-md flex items-center gap-2">
+                    <i class="fa-solid fa-star text-yellow-100 text-xl drop-shadow"></i>
+                    <div>
+                        <div class="text-xs uppercase font-bold text-amber-900 leading-none">Stars</div>
+                        <div id="scoreText" class="text-xl md:text-2xl font-black leading-none">0</div>
+                    </div>
+                </div>
+                
+                <div class="bg-emerald-400 text-emerald-950 px-4 py-2 rounded-xl border-2 border-emerald-500 shadow-md flex items-center gap-2">
+                    <i class="fa-solid fa-fire text-orange-600 text-xl animate-bounce"></i>
+                    <div>
+                        <div class="text-xs uppercase font-bold text-emerald-900 leading-none">Streak</div>
+                        <div id="streakText" class="text-xl md:text-2xl font-black leading-none">0</div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Interactive Game Canvas -->
+        <div class="relative flex-1 w-full h-full my-2">
+            <canvas id="gameCanvas" class="w-full h-full block rounded-2xl"></canvas>
+            <canvas id="particleCanvas"></canvas>
+        </div>
+
+        <!-- Banner for Feedback / Encouragement Popups -->
+        <div id="feedbackBanner" class="hidden absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-30 bg-white/95 border-8 border-yellow-400 rounded-3xl p-6 shadow-2xl text-center max-w-sm w-11/12 animate-bounce">
+            <h2 id="feedbackTitle" class="text-3xl font-black text-rose-500 mb-2">Awesome!</h2>
+            <div id="feedbackIcon" class="text-6xl my-2">🎈</div>
+            <p id="feedbackText" class="text-xl font-bold text-indigo-800">That's B for Ball!</p>
+            <p id="reshootHint" class="text-xs font-semibold text-emerald-600 mt-2 bg-emerald-100 py-1 px-3 rounded-full inline-block">🎯 Shoot the target again to repeat!</p>
+        </div>
+
+    </div>
+
+    <!-- Start / Mode Selection Modal -->
+    <div id="startModal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="bg-gradient-to-b from-white to-sky-100 border-8 border-yellow-400 rounded-3xl p-6 md:p-8 max-w-lg w-full text-center shadow-2xl relative overflow-hidden">
+            
+            <div class="absolute -top-10 -right-10 w-32 h-32 bg-yellow-300 rounded-full opacity-50 blur-xl"></div>
+            <div class="absolute -bottom-10 -left-10 w-32 h-32 bg-pink-300 rounded-full opacity-50 blur-xl"></div>
+
+            <h1 class="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-rose-500 via-purple-600 to-indigo-600 mb-2 tracking-wide drop-shadow-sm">
+                ALPHABET SHOOTER
+            </h1>
+            <p class="text-gray-600 font-bold mb-6 text-sm md:text-base">Pop balloons, learn phonics, and master your A to Z!</p>
+
+            <div class="space-y-3 mb-6">
+                <label class="block text-left text-xs uppercase font-extrabold text-indigo-900 tracking-wider">Select Difficulty Set:</label>
+                
+                <button data-mode="easy" class="mode-btn w-full btn-3d bg-emerald-400 hover:bg-emerald-300 text-emerald-950 font-black py-3 px-4 rounded-2xl border-b-4 border-emerald-600 flex items-center justify-between text-lg">
+                    <span><i class="fa-solid fa-seedling mr-2"></i> Easy (A - E)</span>
+                    <span class="text-xs bg-emerald-200 px-2 py-1 rounded-lg">5 Letters</span>
+                </button>
+                
+                <button data-mode="medium" class="mode-btn w-full btn-3d bg-amber-400 hover:bg-amber-300 text-amber-950 font-black py-3 px-4 rounded-2xl border-b-4 border-amber-600 flex items-center justify-between text-lg">
+                    <span><i class="fa-solid fa-star mr-2"></i> Medium (A - M)</span>
+                    <span class="text-xs bg-amber-200 px-2 py-1 rounded-lg">13 Letters</span>
+                </button>
+
+                <button data-mode="all" class="mode-btn w-full btn-3d bg-rose-500 hover:bg-rose-400 text-white font-black py-3 px-4 rounded-2xl border-b-4 border-rose-700 flex items-center justify-between text-lg">
+                    <span><i class="fa-solid fa-trophy mr-2"></i> All Letters (A - Z)</span>
+                    <span class="text-xs bg-rose-700 px-2 py-1 rounded-lg">26 Letters</span>
+                </button>
+            </div>
+
+            <!-- Speed Control Toggle -->
+            <div class="flex items-center justify-between bg-white/80 p-3 rounded-xl border border-sky-200 mb-6">
+                <span class="text-xs md:text-sm font-extrabold text-indigo-900"><i class="fa-solid fa-gauge-high mr-1 text-sky-500"></i> Balloon Speed:</span>
+                <div class="flex gap-2">
+                    <button id="speedSlow" class="speed-btn px-3 py-1 rounded-lg text-xs font-bold bg-sky-500 text-white border-b-2 border-sky-700">Slow</button>
+                    <button id="speedFast" class="speed-btn px-3 py-1 rounded-lg text-xs font-bold bg-gray-200 text-gray-700 border-b-2 border-gray-400">Normal</button>
+                </div>
+            </div>
+
+            <button id="btnStartGame" class="w-full btn-3d bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-amber-950 font-black py-4 px-6 rounded-2xl border-b-4 border-amber-700 text-2xl shadow-lg flex items-center justify-center gap-3">
+                <i class="fa-solid fa-play text-2xl"></i> START PLAYING!
+            </button>
+        </div>
+    </div>
+
+    <!-- Web Audio API and Speech System JavaScript -->
+    <script>
+        /**
+         * Phonics & Word Dictionary for A to Z Learning
+         */
+        const ALPHABET_DATA = {
+            'A': { word: 'Apple', icon: '🍎', color: '#f43f5e' },
+            'B': { word: 'Ball', icon: '⚽', color: '#3b82f6' },
+            'C': { word: 'Cat', icon: '🐱', color: '#eab308' },
+            'D': { word: 'Dog', icon: '🐶', color: '#10b981' },
+            'E': { word: 'Elephant', icon: '🐘', color: '#8b5cf6' },
+            'F': { word: 'Fish', icon: '🐟', color: '#06b6d4' },
+            'G': { word: 'Giraffe', icon: '🦒', color: '#f97316' },
+            'H': { word: 'House', icon: '🏠', color: '#ec4899' },
+            'I': { word: 'Ice Cream', icon: '🍦', color: '#6366f1' },
+            'J': { word: 'Juice', icon: '🧃', color: '#84cc16' },
+            'K': { word: 'Kite', icon: '🪁', color: '#14b8a6' },
+            'L': { word: 'Lion', icon: '🦁', color: '#f59e0b' },
+            'M': { word: 'Monkey', icon: '🐒', color: '#a855f7' },
+            'N': { word: 'Nest', icon: '🪹', color: '#64748b' },
+            'O': { word: 'Owl', icon: '🦉', color: '#0284c7' },
+            'P': { word: 'Pencil', icon: '✏️', color: '#d97706' },
+            'Q': { word: 'Queen', icon: '👑', color: '#c084fc' },
+            'R': { word: 'Robot', icon: '🤖', color: '#ef4444' },
+            'S': { word: 'Sun', icon: '☀️', color: '#eab308' },
+            'T': { word: 'Tree', icon: '🌳', color: '#22c55e' },
+            'U': { word: 'Umbrella', icon: '☂️', color: '#3b82f6' },
+            'V': { word: 'Violin', icon: '🎻', color: '#a855f7' },
+            'W': { word: 'Watermelon', icon: '🍉', color: '#f43f5e' },
+            'X': { word: 'Xylophone', icon: '🎼', color: '#06b6d4' },
+            'Y': { word: 'Yak', icon: '🐂', color: '#b45309' },
+            'Z': { word: 'Zebra', icon: '🦓', color: '#334155' }
+        };
+
+        // Sound Synthesis & Web Audio API
+        class SoundFX {
+            constructor() {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                this.muted = false;
+            }
+
+            playPop() {
+                if (this.muted) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(800, this.ctx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.1);
+            }
+
+            playWrong() {
+                if (this.muted) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(250, this.ctx.currentTime);
+                osc.frequency.setValueAtTime(180, this.ctx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.3);
+            }
+
+            playCheer() {
+                if (this.muted) return;
+                const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+                notes.forEach((freq, index) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime + index * 0.08);
+                    gain.gain.setValueAtTime(0.2, this.ctx.currentTime + index * 0.08);
+                    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + index * 0.08 + 0.2);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(this.ctx.currentTime + index * 0.08);
+                    osc.stop(this.ctx.currentTime + index * 0.08 + 0.2);
+                });
+            }
+        }
+
+        // Web Speech API Voice Controller
+        class VoiceController {
+            constructor() {
+                this.synth = window.speechSynthesis;
+                this.enabled = true;
+                this.selectedVoice = null;
+                this.initVoice();
+            }
+
+            initVoice() {
+                if (!this.synth) return;
+                const loadVoices = () => {
+                    const voices = this.synth.getVoices();
+                    // Prefer friendly English child/female sounding voices if available
+                    this.selectedVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Female'))) || voices.find(v => v.lang.startsWith('en')) || voices[0];
+                };
+                loadVoices();
+                if (speechSynthesis.onvoiceschanged !== undefined) {
+                    speechSynthesis.onvoiceschanged = loadVoices;
+                }
+            }
+
+            speak(text, priority = false) {
+                if (!this.enabled || !this.synth) return;
+                if (priority) {
+                    this.synth.cancel(); // Stop current speech
+                }
+                const utterance = new SpeechSynthesisUtterance(text);
+                if (this.selectedVoice) utterance.voice = this.selectedVoice;
+                utterance.rate = 0.85; // Slightly slower for clarity in children's learning
+                utterance.pitch = 1.1; // Friendly pitch
+                this.synth.speak(utterance);
+            }
+        }
+
+        // Particle FX system for explosive balloon popping
+        class ParticleSystem {
+            constructor(canvas) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d');
+                this.particles = [];
+                this.resize();
+                window.addEventListener('resize', () => this.resize());
+            }
+
+            resize() {
+                this.canvas.width = this.canvas.parentElement.clientWidth;
+                this.canvas.height = this.canvas.parentElement.clientHeight;
+            }
+
+            explode(x, y, color) {
+                const count = 25;
+                for (let i = 0; i < count; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = Math.random() * 6 + 2;
+                    this.particles.push({
+                        x: x,
+                        y: y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        size: Math.random() * 8 + 4,
+                        color: color,
+                        alpha: 1,
+                        decay: Math.random() * 0.03 + 0.015,
+                        shape: Math.random() > 0.5 ? 'circle' : 'star'
+                    });
+                }
+            }
+
+            updateAndDraw() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    const p = this.particles[i];
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vy += 0.1; // Gravity effect
+                    p.alpha -= p.decay;
+
+                    if (p.alpha <= 0) {
+                        this.particles.splice(i, 1);
+                        continue;
+                    }
+
+                    this.ctx.save();
+                    this.ctx.globalAlpha = p.alpha;
+                    this.ctx.fillStyle = p.color;
+
+                    if (p.shape === 'circle') {
+                        this.ctx.beginPath();
+                        this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                        this.ctx.fill();
+                    } else {
+                        // Draw star particle
+                        this.ctx.translate(p.x, p.y);
+                        this.ctx.beginPath();
+                        for (let j = 0; j < 5; j++) {
+                            this.ctx.lineTo(Math.cos((18 + j * 72) * Math.PI / 180) * p.size, -Math.sin((18 + j * 72) * Math.PI / 180) * p.size);
+                            this.ctx.lineTo(Math.cos((54 + j * 72) * Math.PI / 180) * (p.size / 2), -Math.sin((54 + j * 72) * Math.PI / 180) * (p.size / 2));
+                        }
+                        this.ctx.closePath();
+                        this.ctx.fill();
+                    }
+                    this.ctx.restore();
+                }
+            }
+        }
+
+        // Floating Balloon Target Class
+        class Balloon {
+            constructor(letter, canvasWidth, canvasHeight, speedMultiplier) {
+                this.letter = letter;
+                this.data = ALPHABET_DATA[letter];
+                this.radius = Math.min(canvasWidth, canvasHeight) * 0.06 + 15; // Responsive radius
+                this.x = Math.random() * (canvasWidth - this.radius * 2) + this.radius;
+                this.y = canvasHeight + this.radius + Math.random() * 100;
+                this.speed = (Math.random() * 1.2 + 0.8) * speedMultiplier;
+                this.wobbleSpeed = Math.random() * 0.05 + 0.02;
+                this.wobbleAmp = Math.random() * 2 + 1;
+                this.angle = Math.random() * Math.PI * 2;
+                this.color = this.data.color;
+            }
+
+            update(canvasHeight) {
+                this.y -= this.speed;
+                this.angle += this.wobbleSpeed;
+                this.x += Math.sin(this.angle) * this.wobbleAmp;
+
+                // Return true if balloon floats off top screen
+                return this.y < -this.radius * 2;
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+
+                // String line below balloon
+                ctx.beginPath();
+                ctx.moveTo(0, this.radius);
+                ctx.quadraticCurveTo(5, this.radius + 15, -5, this.radius + 30);
+                ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Balloon Body Gradient
+                const gradient = ctx.createRadialGradient(
+                    -this.radius * 0.3, -this.radius * 0.3, this.radius * 0.1,
+                    0, 0, this.radius
+                );
+                gradient.addColorStop(0, '#ffffff');
+                gradient.addColorStop(0.3, this.color);
+                gradient.addColorStop(1, adjustColor(this.color, -40));
+
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = gradient;
+                ctx.fill();
+
+                // Balloon Knot
+                ctx.beginPath();
+                ctx.moveTo(-6, this.radius - 2);
+                ctx.lineTo(6, this.radius - 2);
+                ctx.lineTo(0, this.radius + 5);
+                ctx.closePath();
+                ctx.fillStyle = this.color;
+                ctx.fill();
+
+                // Letter Label with Larger Size, High-Contrast Outline & Glow Shadow
+                ctx.font = `900 ${this.radius * 1.5}px 'Fredoka One', 'Arial Black', cursive`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                // Thick Dark Outer Stroke / Outline for Maximum Legibility
+                ctx.lineWidth = 7;
+                ctx.strokeStyle = 'rgba(15, 23, 42, 0.85)'; // Dark slate outline
+                ctx.strokeText(this.letter, 0, 0);
+
+                // High-Contrast White Text Fill
+                ctx.fillStyle = '#ffffff';
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+                ctx.shadowBlur = 8;
+                ctx.shadowOffsetX = 3;
+                ctx.shadowOffsetY = 3;
+                ctx.fillText(this.letter, 0, 0);
+
+                ctx.restore();
+            }
+
+            isClicked(clickX, clickY) {
+                const dist = Math.hypot(this.x - clickX, this.y - clickY);
+                return dist <= this.radius;
+            }
+        }
+
+        // Color helper utility
+        function adjustColor(col, amt) {
+            let num = parseInt(col.replace('#', ''), 16);
+            let r = (num >> 16) + amt;
+            let g = ((num >> 8) & 0x00FF) + amt;
+            let b = (num & 0x0000FF) + amt;
+            return '#' + (0x1000000 + (r < 255 ? (r < 0 ? 0 : r) : 255) * 0x10000 + (g < 255 ? (g < 0 ? 0 : g) : 255) * 0x100 + (b < 255 ? (b < 0 ? 0 : b) : 255)).toString(16).slice(1);
+        }
+
+        // Main Game Application
+        class AlphabetShooterGame {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.sound = new SoundFX();
+                this.voice = new VoiceController();
+                this.particles = new ParticleSystem(document.getElementById('particleCanvas'));
+
+                this.balloons = [];
+                this.activeLetterSet = [];
+                this.currentTarget = 'A';
+                this.score = 0;
+                this.streak = 0;
+                this.speedMultiplier = 1.0;
+                this.selectedMode = 'easy';
+
+                this.lastSpawnTime = 0;
+                this.spawnInterval = 1600; // Time in ms between spawns
+
+                this.initUI();
+                this.resizeCanvas();
+                window.addEventListener('resize', () => this.resizeCanvas());
+            }
+
+            initUI() {
+                // Clouds background builder
+                const cloudContainer = document.getElementById('cloudContainer');
+                for (let i = 0; i < 6; i++) {
+                    const cloud = document.createElement('div');
+                    cloud.className = 'cloud';
+                    const w = Math.random() * 120 + 100;
+                    const h = w * 0.4;
+                    cloud.style.width = `${w}px`;
+                    cloud.style.height = `${h}px`;
+                    cloud.style.top = `${Math.random() * 60}%`;
+                    cloud.style.animationDuration = `${Math.random() * 20 + 18}s`;
+                    cloud.style.animationDelay = `-${Math.random() * 20}s`;
+                    cloudContainer.appendChild(cloud);
+                }
+
+                // UI Event Handlers
+                document.querySelectorAll('.mode-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('ring-4', 'ring-yellow-300'));
+                        const targetBtn = e.currentTarget;
+                        targetBtn.classList.add('ring-4', 'ring-yellow-300');
+                        this.selectedMode = targetBtn.dataset.mode;
+                    });
+                });
+
+                document.getElementById('speedSlow').addEventListener('click', (e) => {
+                    this.speedMultiplier = 0.8;
+                    e.target.className = "speed-btn px-3 py-1 rounded-lg text-xs font-bold bg-sky-500 text-white border-b-2 border-sky-700";
+                    document.getElementById('speedFast').className = "speed-btn px-3 py-1 rounded-lg text-xs font-bold bg-gray-200 text-gray-700 border-b-2 border-gray-400";
+                });
+
+                document.getElementById('speedFast').addEventListener('click', (e) => {
+                    this.speedMultiplier = 1.4;
+                    e.target.className = "speed-btn px-3 py-1 rounded-lg text-xs font-bold bg-sky-500 text-white border-b-2 border-sky-700";
+                    document.getElementById('speedSlow').className = "speed-btn px-3 py-1 rounded-lg text-xs font-bold bg-gray-200 text-gray-700 border-b-2 border-gray-400";
+                });
+
+                document.getElementById('btnStartGame').addEventListener('click', () => {
+                    document.getElementById('startModal').classList.add('hidden');
+                    this.startGame();
+                });
+
+                document.getElementById('btnHome').addEventListener('click', () => {
+                    document.getElementById('startModal').classList.remove('hidden');
+                });
+
+                document.getElementById('btnMute').addEventListener('click', () => {
+                    this.sound.muted = !this.sound.muted;
+                    this.voice.enabled = !this.sound.muted;
+                    document.getElementById('soundIcon').className = this.sound.muted ? 'fa-solid fa-volume-xmark text-rose-300' : 'fa-solid fa-volume-high';
+                });
+
+                document.getElementById('btnRepeatSpeech').addEventListener('click', () => {
+                    this.promptTargetSpeech();
+                });
+
+                // Canvas Click & Touch Listeners
+                const handlePointer = (clientX, clientY) => {
+                    const rect = this.canvas.getBoundingClientRect();
+                    const x = clientX - rect.left;
+                    const y = clientY - rect.top;
+                    this.handleShoot(x, y);
+                };
+
+                this.canvas.addEventListener('click', (e) => handlePointer(e.clientX, e.clientY));
+                this.canvas.addEventListener('touchstart', (e) => {
+                    if (e.touches.length > 0) {
+                        handlePointer(e.touches[0].clientX, e.touches[0].clientY);
+                    }
+                }, { passive: true });
+            }
+
+            resizeCanvas() {
+                const container = this.canvas.parentElement;
+                this.canvas.width = container.clientWidth;
+                this.canvas.height = container.clientHeight;
+            }
+
+            startGame() {
+                // Set Letter Range based on Mode
+                if (this.selectedMode === 'easy') {
+                    this.activeLetterSet = ['A', 'B', 'C', 'D', 'E'];
+                } else if (this.selectedMode === 'medium') {
+                    this.activeLetterSet = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M'];
+                } else {
+                    this.activeLetterSet = Object.keys(ALPHABET_DATA);
+                }
+
+                this.score = 0;
+                this.streak = 0;
+                this.balloons = [];
+                this.updateScoreboard();
+                this.nextTarget();
+
+                // Start Main Animation Loop
+                requestAnimationFrame((ts) => this.gameLoop(ts));
+            }
+
+            nextTarget() {
+                // Select a random letter from current set
+                const randomIndex = Math.floor(Math.random() * this.activeLetterSet.length);
+                this.currentTarget = this.activeLetterSet[randomIndex];
+
+                // Update Header UI
+                const data = ALPHABET_DATA[this.currentTarget];
+                document.getElementById('targetLetter').textContent = this.currentTarget;
+                document.getElementById('targetLetter').style.color = data.color;
+                document.getElementById('targetWord').textContent = `(${this.currentTarget} for ${data.word})`;
+
+                // Speak Prompt
+                this.promptTargetSpeech();
+
+                // Ensure at least one target balloon is spawned immediately
+                this.spawnBalloon(this.currentTarget);
+            }
+
+            promptTargetSpeech() {
+                const data = ALPHABET_DATA[this.currentTarget];
+                this.voice.speak(`Shoot Letter ${this.currentTarget}. ${this.currentTarget} for ${data.word}!`, true);
+            }
+
+            spawnBalloon(forcedLetter = null) {
+                let letter = forcedLetter;
+                if (!letter) {
+                    // 40% chance to spawn current target letter, else random letter
+                    if (Math.random() < 0.4) {
+                        letter = this.currentTarget;
+                    } else {
+                        letter = this.activeLetterSet[Math.floor(Math.random() * this.activeLetterSet.length)];
+                    }
+                }
+
+                this.balloons.push(new Balloon(letter, this.canvas.width, this.canvas.height, this.speedMultiplier));
+            }
+
+            handleShoot(x, y) {
+                for (let i = this.balloons.length - 1; i >= 0; i--) {
+                    const b = this.balloons[i];
+                    if (b.isClicked(x, y)) {
+                        
+                        // Particle explosion at target location
+                        this.particles.explode(b.x, b.y, b.color);
+
+                        if (b.letter === this.currentTarget) {
+                            // CORRECT TARGET HIT!
+                            this.sound.playPop();
+                            this.sound.playCheer();
+                            this.score += 10;
+                            this.streak += 1;
+                            this.updateScoreboard();
+
+                            // Confetti burst for milestone streaks
+                            if (this.streak % 5 === 0 && window.confetti) {
+                                confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+                            }
+
+                            const data = ALPHABET_DATA[b.letter];
+                            this.showFeedback(
+                                `Great Job!`, 
+                                `${data.icon} That's ${b.letter}! ${b.letter} for ${data.word}!`,
+                                '#10b981'
+                            );
+
+                            // Voice encouragement
+                            this.voice.speak(`Awesome! That's ${b.letter}! ${b.letter} for ${data.word}!`, true);
+
+                            // Remove hit balloon and pick new target after short delay
+                            this.balloons.splice(i, 1);
+                            
+                            setTimeout(() => {
+                                this.nextTarget();
+                            }, 1200);
+
+                        } else {
+                            // WRONG TARGET HIT
+                            this.sound.playWrong();
+                            this.streak = 0;
+                            this.updateScoreboard();
+
+                            const data = ALPHABET_DATA[b.letter];
+                            this.showFeedback(
+                                `Oops!`,
+                                `That's '${b.letter}' (${data.word}). Look for '${this.currentTarget}'!`,
+                                '#f43f5e'
+                            );
+
+                            this.voice.speak(`That's ${b.letter}! Try looking for ${this.currentTarget}!`, true);
+
+                            // Remove popped wrong balloon so child can keep trying
+                            this.balloons.splice(i, 1);
+                        }
+
+                        break;
+                    }
+                }
+            }
+
+            showFeedback(title, text, color) {
+                const banner = document.getElementById('feedbackBanner');
+                const titleEl = document.getElementById('feedbackTitle');
+                const textEl = document.getElementById('feedbackText');
+
+                titleEl.textContent = title;
+                titleEl.style.color = color;
+                textEl.textContent = text;
+
+                banner.classList.remove('hidden');
+                clearTimeout(this.feedbackTimeout);
+                this.feedbackTimeout = setTimeout(() => {
+                    banner.classList.add('hidden');
+                }, 2200);
+            }
+
+            updateScoreboard() {
+                document.getElementById('scoreText').textContent = this.score;
+                document.getElementById('streakText').textContent = this.streak;
+            }
+
+            gameLoop(timestamp) {
+                // Clear Canvas
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+                // Spawn balloons periodically
+                if (timestamp - this.lastSpawnTime > this.spawnInterval) {
+                    this.spawnBalloon();
+                    this.lastSpawnTime = timestamp;
+                }
+
+                // Update & Draw Balloons
+                for (let i = this.balloons.length - 1; i >= 0; i--) {
+                    const b = this.balloons[i];
+                    const offscreen = b.update(this.canvas.height);
+                    b.draw(this.ctx);
+
+                    // Remove balloons that float past top
+                    if (offscreen) {
+                        this.balloons.splice(i, 1);
+                    }
+                }
+
+                // Render particle FX explosions
+                this.particles.updateAndDraw();
+
+                // Keep looping
+                requestAnimationFrame((ts) => this.gameLoop(ts));
+            }
+        }
+
+        // Initialize Game once DOM and window are loaded
+        window.onload = () => {
+            window.gameInstance = new AlphabetShooterGame();
+        };
+    </script>
+</body>
+</html>
